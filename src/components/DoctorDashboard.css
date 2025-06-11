@@ -289,3 +289,36 @@
     padding: 1rem;
   }
 }
+
+/* Cor padrão (usada para "Atender") */
+.attend-button {
+  background: var(--bg-primary);
+  color: white;
+  border: none;
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Cor para o botão de finalizar (vermelho) */
+.attend-button.finish {
+  background-color: #e03131; /* Cor de perigo/finalização */
+}
+
+/* Cor para o botão de anamnese (cinza/secundário) */
+.attend-button.anamnesis {
+  background-color: #868e96; /* Cor neutra/secundária */
+}
+
+.attend-button:hover {
+  opacity: 0.9;
+}
+
+.attend-button:active {
+  transform: scale(0.98);
+}

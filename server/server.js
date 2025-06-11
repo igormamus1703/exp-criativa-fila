@@ -102,10 +102,37 @@ apiRouter.post('/queue', async (req, res) => {
   const { cpf, is_priority = false } = req.body;
   if (!cpf) return res.status(400).json({ error: 'CPF não fornecido' });
   try {
-    const [pRows] = await pool.query('SELECT id FROM patients WHERE cpf = ?', [cpf]);
-    if (pRows.length === 0) return res.status(404).json({ error: 'Paciente não cadastrado' });
-    const patient_id = pRows[0].id;
-    const [result] = await pool.query('INSERT INTO queue_entries (patient_id, is_priority) VALUES (?, ?)', [patient_id, is_priority]);
+    // MUDANÇA: Buscamos também a data de nascimento (birth_date)
+    const [pRows] = await pool.query('SELECT id, birth_date FROM patients WHERE cpf = ?', [cpf]);
+
+    if (pRows.length === 0) {
+      return res.status(404).json({ error: 'Paciente não cadastrado' });
+    }
+
+    const patient = pRows[0];
+
+    // --- LÓGICA DE PRIORIDADE POR IDADE ---
+    let finalPriority = is_priority; // Começa com a prioridade vinda da requisição (se houver)
+    if (patient.birth_date) {
+      const birthDate = new Date(patient.birth_date);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      
+      // Se a pessoa tem 60 anos ou mais, ela recebe prioridade
+      if (age >= 60) {
+        finalPriority = true; // ou 1
+      }
+    }
+    // --- FIM DA LÓGICA ---
+
+    const [result] = await pool.query(
+      'INSERT INTO queue_entries (patient_id, is_priority) VALUES (?, ?)',
+      [patient.id, finalPriority] // Usa a prioridade final calculada
+    );
     const [rows] = await pool.query('SELECT * FROM queue_entries WHERE id = ?', [result.insertId]);
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -127,7 +154,8 @@ apiRouter.get('/queue', async (req, res) => {
         p.email,
         p.phone,
         p.cpf,
-        p.gender
+        p.gender,
+        p.birth_date  
       FROM queue_entries qe
       INNER JOIN patients p ON qe.patient_id = p.id
       WHERE qe.status = ?
@@ -151,19 +179,25 @@ apiRouter.get('/queue', async (req, res) => {
 // ENDPOINT NOVO: Atender paciente na fila
 //ta funcionando suave
 apiRouter.post('/queue/:id/attend', async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params; // ID da entrada na fila (queue_entries)
   try {
-    const now = new Date();
-    await pool.query(
-      'UPDATE queue_entries SET status = ?, served_at = ? WHERE id = ?',
-      ['attended', now, id]
+    // Apenas muda o status para 'attending' e define a hora que o atendimento começou
+    const [result] = await pool.query(
+      "UPDATE queue_entries SET status = 'attending', served_at = NOW() WHERE id = ? AND status = 'waiting'",
+      [id]
     );
-    res.json({ message: 'Paciente atendido com sucesso' });
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Paciente não encontrado na fila de espera ou já em atendimento.' });
+    }
+
+    res.json({ message: 'Atendimento iniciado com sucesso.' });
   } catch (err) {
-    console.error('Erro ao atender paciente:', err);
-    res.status(500).json({ error: err.message });
+    console.error('Erro ao iniciar atendimento:', err);
+    res.status(500).json({ error: 'Erro interno ao iniciar atendimento.' });
   }
 });
+
 //ENDPOINT: GET na anamnese do paciente atual
 apiRouter.get('/queue/:id/anamnesis', async (req, res) => {
   const { id } = req.params;
@@ -421,7 +455,46 @@ apiRouter.get('/patients/:id/anamnesis', async (req, res) => {
   }
 });
 
+apiRouter.post('/queue/:id/finish', async (req, res) => {
+  const { id } = req.params; // ID da entrada na fila (queue_entries)
+  try {
+    // Apenas muda o status para 'attended'. O served_at já foi definido no início.
+    const [result] = await pool.query(
+      "UPDATE queue_entries SET status = 'attended' WHERE id = ? AND status = 'attending'",
+      [id]
+    );
 
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Nenhum atendimento em andamento encontrado para este paciente.' });
+    }
+
+    res.json({ message: 'Atendimento finalizado com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao finalizar atendimento:', err);
+    res.status(500).json({ error: 'Erro interno ao finalizar atendimento.' });
+  }
+});
+
+apiRouter.get('/queue/current', async (req, res) => {
+  try {
+    const sql = `
+      SELECT 
+        qe.*,
+        p.name, p.email, p.phone, p.cpf, p.gender, p.birth_date
+      FROM queue_entries qe
+      INNER JOIN patients p ON qe.patient_id = p.id
+      WHERE qe.status = 'attending'
+      ORDER BY qe.served_at DESC
+      LIMIT 1
+    `;
+    const [rows] = await pool.query(sql);
+    // Retorna o paciente encontrado ou null se não houver nenhum
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error('Erro ao buscar paciente em atendimento:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 
 
