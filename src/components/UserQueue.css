@@ -79,3 +79,52 @@
   font-size: 0.9rem;
   margin-top: 1rem;
 }
+
+.doctors-promo {
+  margin-top: 10px;
+  padding: 20px;
+  background-color: #eef7ff;
+  border: 1px solid #bce0fd;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.doctors-promo p {
+  margin: 0 0 15px 0;
+  color: #0056b3;
+  font-size: 1.1rem;
+}
+
+.doctors-promo button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.doctors-promo button:hover {
+  background-color: #0056b3;
+}
+
+.leave-btn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: bold;
+  transition: background-color 0.2s;
+  width: auto; /* 1. Largura ajustada para automática */
+  margin-top: 15px; /* 2. Espaço adicionado acima do botão */
+  margin-bottom: 20px;
+}
+
+.leave-btn:hover {
+  background-color: #c82333; /* Um tom de vermelho mais escuro */
+}

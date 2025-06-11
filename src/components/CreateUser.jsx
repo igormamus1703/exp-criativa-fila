@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import api from '../services/api';
 import './CreateUser.css';
 
-export default function CreateUser({ onCancel }) {
+export default function CreateUser({ onCancel, onSuccess }) {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [role, setRole] = useState('user');
@@ -15,10 +15,27 @@ export default function CreateUser({ onCancel }) {
     try {
       await api.post('/users', { login, senha, role });
       setIsError(false);
-      setMsg('Usuário criado com sucesso');
+      // Atualiza a mensagem para avisar sobre o redirecionamento
+      setMsg('Usuário criado com sucesso!');
+
+      // 2. Chama a função 'onSuccess' (que muda a tela no App.js) após 1 segundo
+      setTimeout(() => {
+        onSuccess();
+      }, 1000); 
+
     } catch (err) {
+      // --- ALTERAÇÃO PRINCIPAL ESTÁ AQUI ---
       setIsError(true);
-      setMsg('Erro ao criar usuário');
+      // Verificamos se o erro tem uma resposta do servidor com uma mensagem específica
+      if (err.response && err.response.data && err.response.data.error) {
+        // Se tiver, usamos a mensagem vinda do backend (ex: "Login já existe")
+        setMsg(err.response.data.error);
+      } else {
+        // Caso contrário, usamos uma mensagem genérica
+        setMsg('Erro ao criar usuário');
+      }
+      // Logamos o erro completo no console para depuração
+      console.error('Erro ao criar usuário:', err);
     }
   };
 
