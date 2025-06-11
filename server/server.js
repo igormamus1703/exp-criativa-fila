@@ -3,6 +3,7 @@ import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
 import mysql from 'mysql2/promise';
+import { sendNotificationEmail } from './emailConfig.js';
 
 // Importações necessárias para servir o frontend
 import path from 'path';
@@ -10,7 +11,8 @@ import { fileURLToPath } from 'url';
 
 // --- CONFIGURAÇÃO INICIAL ---
 const app = express();
-const pool = mysql.createPool(process.env.DATABASE_URL);
+console.log('URL do banco:', process.env.DATABASE_URL);
+const pool = mysql.createPool(process.env.DATABASE_URL || 'mysql://root:1234@localhost:3306/exp-criativa-fila');
 
 // Teste de conexão ao banco
 (async () => {
@@ -177,11 +179,23 @@ apiRouter.get('/queue', async (req, res) => {
 });
 
 // ENDPOINT NOVO: Atender paciente na fila
-//ta funcionando suave
 apiRouter.post('/queue/:id/attend', async (req, res) => {
   const { id } = req.params; // ID da entrada na fila (queue_entries)
   try {
-    // Apenas muda o status para 'attending' e define a hora que o atendimento começou
+    // Primeiro, buscar os dados do paciente
+    const [patientData] = await pool.query(
+      `SELECT p.email, p.name 
+       FROM queue_entries qe 
+       JOIN patients p ON qe.patient_id = p.id 
+       WHERE qe.id = ?`,
+      [id]
+    );
+
+    if (patientData.length === 0) {
+      return res.status(404).json({ error: 'Paciente não encontrado na fila.' });
+    }
+
+    // Atualizar o status do paciente
     const [result] = await pool.query(
       "UPDATE queue_entries SET status = 'attending', served_at = NOW() WHERE id = ? AND status = 'waiting'",
       [id]
@@ -191,7 +205,16 @@ apiRouter.post('/queue/:id/attend', async (req, res) => {
       return res.status(404).json({ error: 'Paciente não encontrado na fila de espera ou já em atendimento.' });
     }
 
-    res.json({ message: 'Atendimento iniciado com sucesso.' });
+    // Se o paciente tem email, tenta enviar notificação
+    let emailSent = false;
+    if (patientData[0]?.email) {
+      emailSent = await sendNotificationEmail(patientData[0].email, patientData[0].name);
+    }
+
+    res.json({ 
+      message: 'Atendimento iniciado com sucesso.',
+      notification: emailSent ? 'Email enviado' : 'Email não enviado'
+    });
   } catch (err) {
     console.error('Erro ao iniciar atendimento:', err);
     res.status(500).json({ error: 'Erro interno ao iniciar atendimento.' });
@@ -493,6 +516,35 @@ apiRouter.get('/queue/current', async (req, res) => {
   } catch (err) {
     console.error('Erro ao buscar paciente em atendimento:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// NOVO ENDPOINT: Listar todos os médicos
+apiRouter.get('/doctors', async (req, res) => {
+  try {
+    // Buscamos no banco todos os usuários cuja 'role' é 'doctor'
+    const [doctors] = await pool.query(
+      "SELECT id, login FROM usuarios WHERE role = 'doctor'"
+    );
+
+    // Bônus: Vamos formatar o nome do médico a partir do email para ficar mais amigável no card.
+    // Ex: 'dr.felipe.boaretto@email.com' vira 'Dr. Felipe Boaretto'
+    const formattedDoctors = doctors.map(doc => {
+      const namePart = doc.login.split('@')[0]; // Pega a parte antes do @
+      const cleanedName = namePart.replace(/[._]/g, ' '); // Troca pontos e underlines por espaço
+      const capitalizedName = cleanedName.split(' ')
+                                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                        .join(' ');
+      return {
+        id: doc.id,
+        name: capitalizedName
+      };
+    });
+
+    res.json(formattedDoctors);
+  } catch (error) {
+    console.error('Erro ao buscar médicos:', error);
+    res.status(500).json({ message: 'Erro interno ao buscar médicos.' });
   }
 });
 

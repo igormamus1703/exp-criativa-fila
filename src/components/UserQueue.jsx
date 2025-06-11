@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../services/api'; // Confirme se o caminho para seu arquivo api.js está correto
 import AnamneseModal from './AnamneseModal';
+import DoctorsModal from './DoctorsModal';
 import './UserQueue.css'; // Arquivo de estilos para este componente
 
 // Constante para o tempo médio de atendimento
@@ -15,7 +16,8 @@ export default function UserQueue({ userId }) {
   const [remainingSeconds, setRemainingSeconds] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAnamneseModal, setShowAnamneseModal] = useState(false);
-
+  const [isDoctorsModalOpen, setDoctorsModalOpen] = useState(false);
+  
   const timerRef = useRef(null);
 
   const fetchData = useCallback(async () => {
@@ -197,6 +199,37 @@ export default function UserQueue({ userId }) {
     }
   };
 
+  // Lógica para sair da fila
+  const handleLeaveQueue = async () => {
+    // 1. Pede confirmação ao usuário
+    if (!window.confirm("Você tem certeza que deseja sair da fila?")) {
+        return;
+    }
+
+    // 2. Encontra a ID da entrada na fila do paciente atual
+    const userQueueEntry = queue.find(
+      (entry) => entry.patient_id === patient.id && entry.status === 'waiting'
+    );
+
+    if (!userQueueEntry) {
+      setError("Não foi possível encontrar sua entrada na fila. A página será atualizada.");
+      fetchData();
+      return;
+    }
+
+    try {
+      // 3. Chama a API para remover (soft delete) a entrada da fila
+      await api.delete(`/queue/${userQueueEntry.id}`);
+      
+      // 4. Força a atualização dos dados para refletir a mudança na tela
+      await fetchData();
+
+    } catch (err) {
+      console.error("Erro ao sair da fila:", err);
+      setError("Ocorreu um erro ao tentar sair da fila.");
+    }
+  };
+
   const formatTime = (seconds) => {
     if (seconds === null || seconds < 0) return 'Calculando...';
     if (seconds === 0 && joined) return 'Provavelmente é sua vez!';
@@ -279,11 +312,24 @@ export default function UserQueue({ userId }) {
                         <em>Entrou na fila às: {new Date(queue.find(e => e.patient_id === patient.id).created_at).toLocaleTimeString()}</em>
                     </p>
                  )}
+
+                 {/* --- BOTÃO NOVO --- */}
+                <button className="leave-btn" onClick={handleLeaveQueue}>
+                  Sair da Fila
+                </button>
+
+                <div className="doctors-promo">
+                    <p>Quer saber quem pode te antender? <br/>
+                    Que tal conhecer os médicos do nosso corpo clínico?</p>
+                    <button onClick={() => setDoctorsModalOpen(true)}>Conhecer Médicos</button>
+                </div>
               </div>
             )}
           </>
         )}
       </div>
+
+      <DoctorsModal isOpen={isDoctorsModalOpen} onClose={() => setDoctorsModalOpen(false)} />
 
       {showAnamneseModal && patient && (
         <AnamneseModal

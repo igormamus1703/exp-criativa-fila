@@ -88,7 +88,10 @@ export default function App() {
       )}
 
       {screen === 'create-user' && (
-        <CreateUser onCancel={() => setScreen('login')} />
+        <CreateUser 
+          onCancel={() => setScreen('login')}
+          onSuccess={() => setScreen('login')} // <-- ADICIONE ESTA LINHA
+        />
       )}
 
       {screen === 'register-patient' && user && (
