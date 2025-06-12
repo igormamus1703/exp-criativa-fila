@@ -42,6 +42,32 @@ const apiRouter = express.Router(); // Criamos um roteador dedicado para a API
 // Health-check
 apiRouter.get('/health', (req, res) => res.status(200).json({ status: 'OK' }));
 
+let filaEmCache = [];
+let versaoDaFila = 0; // Nosso ETag. Um número simples que incrementamos a cada mudança.
+
+
+// Função que busca a fila no banco e atualiza nosso cache
+async function atualizarCacheDaFila() {
+  try {
+    const sql = `
+      SELECT 
+        qe.*,
+        p.name, p.email, p.phone, p.cpf, p.gender, p.birth_date
+      FROM queue_entries qe
+      INNER JOIN patients p ON qe.patient_id = p.id
+      WHERE qe.status = 'waiting'
+      ORDER BY qe.is_priority DESC, qe.created_at ASC
+    `;
+    const [rows] = await pool.query(sql);
+    filaEmCache = rows; // Atualiza os dados do cache
+    versaoDaFila++;     // Incrementa a versão, invalidando o cache dos clientes
+    console.log(`[Cache] Fila atualizada para a versão ${versaoDaFila}. ${filaEmCache.length} pessoas esperando.`);
+  } catch (err) {
+    console.error('[Cache] Erro ao atualizar o cache da fila:', err);
+  }
+}
+
+
 // MUDANÇA: Todas as rotas agora usam 'apiRouter' em vez de 'app'
 apiRouter.post('/users', async (req, res) => {
   const { login, senha, role } = req.body;
@@ -136,6 +162,7 @@ apiRouter.post('/queue', async (req, res) => {
       [patient.id, finalPriority] // Usa a prioridade final calculada
     );
     const [rows] = await pool.query('SELECT * FROM queue_entries WHERE id = ?', [result.insertId]);
+    await atualizarCacheDaFila();
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error('Erro ao entrar na fila:', err);
@@ -146,36 +173,18 @@ apiRouter.post('/queue', async (req, res) => {
 // ENDPOINT NOVO: Listar fila (somente status = waiting)
 // ajustei a consulta para retornar os dados relevantes do paciente
 //ta funcionando suave
-apiRouter.get('/queue', async (req, res) => {
-  try {
-    const { priority } = req.query;
-    let sql = `
-      SELECT 
-        qe.*,
-        p.name,
-        p.email,
-        p.phone,
-        p.cpf,
-        p.gender,
-        p.birth_date  
-      FROM queue_entries qe
-      INNER JOIN patients p ON qe.patient_id = p.id
-      WHERE qe.status = ?
-    `;
-    const params = ['waiting'];
+apiRouter.get('/queue', (req, res) => {
+  const etagDoCliente = req.get('If-None-Match');
 
-    if (priority === 'true' || priority === 'false') {
-      sql += ' AND qe.is_priority = ?';
-      params.push(priority === 'true');
-    }
-
-    sql += ' ORDER BY qe.is_priority DESC, qe.created_at ASC';
-    const [rows] = await pool.query(sql, params);
-    res.json(rows);
-  } catch (err) {
-    console.error('Erro ao buscar fila:', err);
-    res.status(500).json({ error: err.message });
+  // Compara a versão do cliente com a do servidor (convertida para string)
+  if (etagDoCliente && etagDoCliente === String(versaoDaFila)) {
+    // A versão é a mesma, nada mudou.
+    return res.status(304).send(); // Envia a resposta "Not Modified"
   }
+
+  // A versão é diferente ou o cliente não tem cache. Envie os dados completos.
+  res.set('ETag', String(versaoDaFila)); // Define o novo ETag no cabeçalho
+  res.json(filaEmCache); // Envia os dados do cache, SEM consultar o banco
 });
 
 // ENDPOINT NOVO: Atender paciente na fila
@@ -204,12 +213,13 @@ apiRouter.post('/queue/:id/attend', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Paciente não encontrado na fila de espera ou já em atendimento.' });
     }
-
     // Se o paciente tem email, tenta enviar notificação
     let emailSent = false;
     if (patientData[0]?.email) {
       emailSent = await sendNotificationEmail(patientData[0].email, patientData[0].name);
     }
+
+    await atualizarCacheDaFila();
 
     res.json({ 
       message: 'Atendimento iniciado com sucesso.',
@@ -407,6 +417,7 @@ apiRouter.delete('/queue/:id', async (req, res) => {
     }
 
     // Retorna sucesso
+    await atualizarCacheDaFila();
     res.status(200).json({ message: 'Paciente removido da fila com sucesso.' });
     
   } catch (err) {
@@ -447,6 +458,7 @@ apiRouter.post('/patients/admin', async (req, res) => {
     await connection.commit();
 
     // Retorna uma resposta de sucesso
+    await atualizarCacheDaFila();
     res.status(201).json({ message: 'Paciente cadastrado e enfileirado com sucesso!' });
 
   } catch (err) {
@@ -490,7 +502,7 @@ apiRouter.post('/queue/:id/finish', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Nenhum atendimento em andamento encontrado para este paciente.' });
     }
-
+    await atualizarCacheDaFila();
     res.json({ message: 'Atendimento finalizado com sucesso.' });
   } catch (err) {
     console.error('Erro ao finalizar atendimento:', err);
@@ -566,4 +578,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // --- INICIALIZAÇÃO DO SERVIDOR ---
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
+app.listen(PORT, async () =>{
+  await atualizarCacheDaFila(); // Atualiza o cache da fila ao iniciar o servidor} 
+  console.log(`🚀 Server rodando na porta ${PORT}`)
+});

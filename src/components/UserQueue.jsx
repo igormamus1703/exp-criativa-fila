@@ -18,6 +18,9 @@ export default function UserQueue({ userId }) {
   const [showAnamneseModal, setShowAnamneseModal] = useState(false);
   const [isDoctorsModalOpen, setDoctorsModalOpen] = useState(false);
   
+  // Estado para a otimização de performance (ETag)
+  const [queueEtag, setQueueEtag] = useState(null);
+
   const timerRef = useRef(null);
 
   const fetchData = useCallback(async () => {
@@ -28,79 +31,94 @@ export default function UserQueue({ userId }) {
     }
 
     try {
-      let patientData = null;
-      try {
-        const resPat = await api.get('/patients/byuser', { params: { user_id: userId } });
-        if (resPat.data && resPat.data.patient) {
-          // LOG IMPORTANTE: Verificar se o CPF está vindo do backend
-          console.log("Dados do paciente recebidos do backend:", resPat.data.patient);
-          patientData = resPat.data.patient;
-          setPatient(patientData);
+      // A busca de dados do paciente e anamnese continua idêntica
+      let patientData = patient; // Usa o estado atual para evitar buscas repetidas
+      if (!patientData) {
+        try {
+          const resPat = await api.get('/patients/byuser', { params: { user_id: userId } });
+          if (resPat.data && resPat.data.patient) {
+            //console.log("Dados do paciente recebidos do backend:", resPat.data.patient);
+            patientData = resPat.data.patient;
+            setPatient(patientData);
 
-          // Buscar anamnese do paciente
-          try {
-            const resAnamnese = await api.get(`/patients/${patientData.id}/anamnesis`);
-            if (resAnamnese.data && resAnamnese.data.length > 0) {
-              setAnamnese(resAnamnese.data[0]);
-            } else {
+            try {
+              const resAnamnese = await api.get(`/patients/${patientData.id}/anamnesis`);
+              if (resAnamnese.data && resAnamnese.data.length > 0) {
+                setAnamnese(resAnamnese.data[0]);
+              } else {
+                setAnamnese(null);
+              }
+            } catch (err) {
+              console.error('Erro ao buscar anamnese:', err);
               setAnamnese(null);
             }
-          } catch (err) {
-            console.error('Erro ao buscar anamnese:', err);
+          } else {
+            setPatient(null);
             setAnamnese(null);
+            setError("Seus dados de paciente não foram encontrados. Por favor, complete seu cadastro de paciente.");
           }
-        } else {
+        } catch (err) {
           setPatient(null);
           setAnamnese(null);
-          setError("Seus dados de paciente não foram encontrados. Por favor, complete seu cadastro de paciente.");
+          if (err.response && err.response.status === 404) {
+              setError("Cadastro de paciente não encontrado. Por favor, realize seu cadastro para entrar na fila.");
+          } else {
+              console.error('Erro ao buscar dados do paciente:', err);
+              setError('Não foi possível carregar seus dados de paciente.');
+          }
         }
+      }
+
+      // --- Bloco de busca da fila: Otimizado e Corrigido ---
+      try {
+        const resQueue = await api.get('/queue', { 
+          headers: { 'If-None-Match': queueEtag } 
+        });
+        
+        // CORREÇÃO: Usamos uma variável local 'newQueue' para guardar os dados frescos da API.
+        const newQueue = resQueue.data || [];
+        
+        // Atualizamos o estado para a próxima renderização e o ETag para a próxima requisição.
+        setQueue(newQueue);
+        setQueueEtag(resQueue.headers.etag);
+
+        // A verificação de 'joined' agora usa a variável local 'newQueue' para ter a informação correta e imediata.
+        if (patientData) {
+          const userEntryInQueue = newQueue.find(
+            (entry) => entry.patient_id === patientData.id && entry.status === 'waiting'
+          );
+          setJoined(!!userEntryInQueue); // '!!' converte o resultado para true ou false
+        }
+
       } catch (err) {
-        setPatient(null);
-        setAnamnese(null);
-        if (err.response && err.response.status === 404) {
-            setError("Cadastro de paciente não encontrado. Por favor, realize seu cadastro para entrar na fila.");
+        if (err.response && err.response.status === 304) {
+          // Resposta 304: A fila não mudou. Não fazemos nada, o que mantém a performance.
         } else {
-            console.error('Erro ao buscar dados do paciente:', err);
-            setError('Não foi possível carregar seus dados de paciente.');
+          // Se for outro tipo de erro, nós o relançamos para o catch principal.
+          throw err;
         }
       }
-
-      const resQueue = await api.get('/queue');
-      const currentQueue = resQueue.data || [];
-      setQueue(currentQueue);
-
-      if (patientData) {
-        const userEntryInQueue = currentQueue.find(
-          (entry) => entry.patient_id === patientData.id && entry.status === 'waiting'
-        );
-        if (userEntryInQueue) {
-          setJoined(true);
-        } else {
-          setJoined(false);
-          setRemainingSeconds(null);
-          if (timerRef.current) clearInterval(timerRef.current);
-        }
-      } else {
-        setJoined(false);
-      }
+      // --- Fim do Bloco Corrigido ---
 
     } catch (err) {
-      console.error('Erro ao buscar dados da fila:', err);
+      console.error('Erro geral no fetchData:', err);
       setError('Não foi possível carregar os dados da fila no momento.');
     } finally {
       if (isLoading) setIsLoading(false);
     }
-  }, [userId, isLoading]);
+  }, [userId, patient, isLoading, queueEtag]); // A dependência de 'patient' e 'isLoading' é importante aqui
 
+  // useEffect para configurar o polling a cada 5 segundos
   useEffect(() => {
     fetchData();
-    const intervalId = setInterval(fetchData, 15000);
+    const intervalId = setInterval(fetchData, 5000); // Intervalo mais curto e eficiente
     return () => {
       clearInterval(intervalId);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetchData]);
+  }, [fetchData]); // Depende de `fetchData` para reiniciar o intervalo se a função mudar
 
+  // useEffect que controla a lógica do timer regressivo (sem alterações)
   useEffect(() => {
     if (!joined || !patient || !queue.length) {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -157,12 +175,13 @@ export default function UserQueue({ userId }) {
     };
   }, [joined, patient, queue, fetchData]);
 
+  // Função para entrar na fila (sem alterações de lógica)
   const handleEnterQueue = async () => {
     setError('');
 
     if (!patient || !patient.cpf) {
       setError('CPF do paciente não encontrado. Verifique seus dados cadastrais ou tente recarregar a página.');
-      console.log('Tentativa de entrar na fila sem CPF (ou sem dados do paciente):', patient);
+      //console.log('Tentativa de entrar na fila sem CPF (ou sem dados do paciente):', patient);
       return;
     }
 
@@ -173,7 +192,7 @@ export default function UserQueue({ userId }) {
     }
 
     try {
-      console.log(`Tentando entrar na fila com CPF: ${patient.cpf}`);
+      //console.log(`Tentando entrar na fila com CPF: ${patient.cpf}`);
 
       await api.post('/queue', {
         cpf: patient.cpf,
@@ -185,7 +204,7 @@ export default function UserQueue({ userId }) {
     } catch (err) {
       console.error('Erro detalhado ao entrar na fila:', err);
       if (err.response) {
-        console.log('Resposta de erro do backend (ao entrar na fila):', err.response.data);
+        //console.log('Resposta de erro do backend (ao entrar na fila):', err.response.data);
         if (err.response.data && err.response.data.error) {
           setError(`Erro ao entrar na fila: ${err.response.data.error}`);
         } else if (err.response.data && typeof err.response.data === 'object') {
@@ -199,14 +218,12 @@ export default function UserQueue({ userId }) {
     }
   };
 
-  // Lógica para sair da fila
+  // Função para sair da fila (sem alterações de lógica)
   const handleLeaveQueue = async () => {
-    // 1. Pede confirmação ao usuário
     if (!window.confirm("Você tem certeza que deseja sair da fila?")) {
         return;
     }
 
-    // 2. Encontra a ID da entrada na fila do paciente atual
     const userQueueEntry = queue.find(
       (entry) => entry.patient_id === patient.id && entry.status === 'waiting'
     );
@@ -218,18 +235,15 @@ export default function UserQueue({ userId }) {
     }
 
     try {
-      // 3. Chama a API para remover (soft delete) a entrada da fila
       await api.delete(`/queue/${userQueueEntry.id}`);
-      
-      // 4. Força a atualização dos dados para refletir a mudança na tela
       await fetchData();
-
     } catch (err) {
       console.error("Erro ao sair da fila:", err);
       setError("Ocorreu um erro ao tentar sair da fila.");
     }
   };
 
+  // Função para formatar o tempo (sem alterações)
   const formatTime = (seconds) => {
     if (seconds === null || seconds < 0) return 'Calculando...';
     if (seconds === 0 && joined) return 'Provavelmente é sua vez!';
@@ -240,9 +254,12 @@ export default function UserQueue({ userId }) {
     return `${m}m ${s < 10 ? '0' : ''}${s}s`;
   };
 
+  // Variáveis auxiliares para a renderização (sem alterações)
   const waitingCount = queue.filter(e => e.status === 'waiting').length;
   const estimatedMinutesBeforeJoining = (waitingCount + 1) * (AVERAGE_SECONDS_PER_PATIENT / 60);
+  const patientName = patient ? patient.name : 'Usuário';
 
+  // JSX de renderização (sem alterações)
   if (isLoading) {
     return (
       <div className="container">
@@ -253,8 +270,6 @@ export default function UserQueue({ userId }) {
     );
   }
   
-  const patientName = patient ? patient.name : 'Usuário';
-
   return (
     <div className="container">
       <div className="queue-box">
@@ -295,11 +310,11 @@ export default function UserQueue({ userId }) {
                 <p className="queue-pos">
                     Sua posição atual: <strong>{
                         queue.filter(e => e.status === 'waiting')
-                             .sort((a, b) => {
-                                 if (a.is_priority !== b.is_priority) return b.is_priority - a.is_priority;
-                                 return new Date(a.created_at) - new Date(b.created_at);
-                             })
-                             .findIndex(e => e.patient_id === patient.id) + 1
+                            .sort((a, b) => {
+                                if (a.is_priority !== b.is_priority) return b.is_priority - a.is_priority;
+                                return new Date(a.created_at) - new Date(b.created_at);
+                            })
+                            .findIndex(e => e.patient_id === patient.id) + 1
                     }</strong>
                 </p>
                 {remainingSeconds !== null && (
@@ -307,13 +322,12 @@ export default function UserQueue({ userId }) {
                     Tempo restante estimado: <strong className="timer-display">{formatTime(remainingSeconds)}</strong>
                   </p>
                 )}
-                 {queue.find(e => e.patient_id === patient.id && e.status === 'waiting') && (
-                    <p className="arrival-time">
-                        <em>Entrou na fila às: {new Date(queue.find(e => e.patient_id === patient.id).created_at).toLocaleTimeString()}</em>
-                    </p>
-                 )}
+                {queue.find(e => e.patient_id === patient.id && e.status === 'waiting') && (
+                  <p className="arrival-time">
+                      <em>Entrou na fila às: {new Date(queue.find(e => e.patient_id === patient.id).created_at).toLocaleTimeString()}</em>
+                  </p>
+                )}
 
-                 {/* --- BOTÃO NOVO --- */}
                 <button className="leave-btn" onClick={handleLeaveQueue}>
                   Sair da Fila
                 </button>
@@ -337,7 +351,7 @@ export default function UserQueue({ userId }) {
           existingAnamnese={anamnese}
           onClose={() => {
             setShowAnamneseModal(false);
-            fetchData(); // Recarrega os dados após fechar o modal
+            fetchData();
           }}
         />
       )}
