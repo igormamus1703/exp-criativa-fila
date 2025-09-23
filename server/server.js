@@ -13,7 +13,7 @@ import createApiRouter from './routes/index.js';
 
 // --- CONFIGURAÇÃO INICIAL E BANCO DE DADOS ---
 const app = express();
-const pool = mysql.createPool(process.env.DATABASE_URL || 'mysql://root:1234@localhost:3306/exp-criativa-fila');
+const pool = mysql.createPool(process.env.DATABASE_URL);
 
 // Teste de conexão ao banco
 (async () => {

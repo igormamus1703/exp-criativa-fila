@@ -4,8 +4,8 @@ const api = axios.create({
   // ALTERAÇÃO PRINCIPAL: A URL base agora é lida da variável de ambiente.
   // Em produção, será o endereço do seu backend no Render.
   // Em desenvolvimento, usará o valor do seu arquivo .env local.
-  //baseURL: process.env.REACT_APP_API_BASE_URL
-  baseURL: 'http://localhost:3001/api' 
+  baseURL: process.env.REACT_APP_API_BASE_URL
+  //baseURL: 'http://localhost:3001/api' 
 });
 
 // Seu interceptor para erros 401 (mantido, está correto)
