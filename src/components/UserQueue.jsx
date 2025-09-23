@@ -296,12 +296,12 @@ export default function UserQueue({ userId }) {
                   <button className="enter-btn" onClick={handleEnterQueue} disabled={!patient || !patient.cpf}>
                     Entrar na Fila
                   </button>
-                  <button 
+                  {/* <button 
                     className="anamnese-btn" 
                     onClick={() => setShowAnamneseModal(true)}
                   >
                     {anamnese ? 'Editar Anamnese' : 'Criar Anamnese'}
-                  </button>
+                  </button> */}
                 </div>
               </div>
             ) : (

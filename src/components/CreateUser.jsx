@@ -63,14 +63,14 @@ export default function CreateUser({ onCancel, onSuccess }) {
             onChange={e => setSenha(e.target.value)}
             required
           />
-          {/* <select
+          <select
             value={role}
             onChange={e => setRole(e.target.value)}
           >
             <option value="user">Usuário</option>
             <option value="admin">Admin</option>
             <option value="doctor">Médico</option>
-          </select> */}
+          </select>
 
           <div className="buttons">
             <button type="submit" className="submit-btn">
