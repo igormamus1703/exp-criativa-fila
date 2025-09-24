@@ -1,8 +1,8 @@
 // src/pages/DoctorDashboard.jsx
 import React, { useCallback, useEffect, useState } from 'react';
-import api from '../services/api';
+import api from '../../services/api';
 import AnamneseModal from './AnamneseModal';
-import './DoctorDashboard.css';
+import '../styles/DoctorDashboard.css';
 
 // FUNÇÃO PARA CALCULAR A IDADE (VERSÃO FINAL E ROBUSTA)
 // Ela lida com datas nulas e formata a saída corretamente.
@@ -132,9 +132,9 @@ export default function DoctorDashboard({ userId }) {
               <div className="info-row"><span className="label">Início Atend.:</span><span className="value">{new Date(attendingPatient.served_at).toLocaleTimeString()}</span></div>
             </div>
             <div className="buttons-row">
-              {/* <button onClick={() => setShowAnamneseModal(true)} className="attend-button anamnesis">
+               <button onClick={() => setShowAnamneseModal(true)} className="attend-button anamnesis">
                 {anamnese ? 'Ver/Editar Anamnese' : 'Criar Anamnese'}
-              </button> */}
+              </button> 
               <button onClick={handleFinishAttendance} className="attend-button finish">
                 Finalizar Atendimento
               </button>

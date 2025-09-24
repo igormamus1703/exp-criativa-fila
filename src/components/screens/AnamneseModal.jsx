@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import api from '../services/api';
-import './AnamneseModal.css';
+import api from '../../services/api';
+import '../styles/AnamneseModal.css';
 
-export default function AnamneseModal({ patientId, existingAnamnese, onClose }) {
+export default function AnamneseModal({ queueEntryId, existingAnamnese, onClose }) {
   const [formAnamnese, setFormAnamnese] = useState({
     queixa_principal: '',
     historia_da_doenca_atual: '',
@@ -40,11 +40,11 @@ export default function AnamneseModal({ patientId, existingAnamnese, onClose }) 
     try {
       if (existingAnamnese) {
         // Atualizar anamnese existente
-        await api.put(`/patients/${patientId}/anamnesis/${existingAnamnese.id}`, formAnamnese);
+         await api.put(`/queue/${queueEntryId}/anamnesis`, formAnamnese);
         setSuccessMessage('Anamnese atualizada com sucesso!');
       } else {
         // Criar nova anamnese
-        await api.post(`/patients/${patientId}/anamnesis`, formAnamnese);
+        await api.post(`/queue/${queueEntryId}/anamnesis`, formAnamnese);
         setSuccessMessage('Anamnese criada com sucesso!');
       }
       

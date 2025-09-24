@@ -1,8 +1,8 @@
 // src/components/AdminDashboard.jsx
 import React, { useState, useEffect } from 'react';
-import api from '../services/api';
+import api from '../../services/api';
 import RegisterPatient from './RegisterPatient';
-import './AdminDashboard.css';
+import '../styles/AdminDashboard.css';
 
 export default function AdminDashboard() {
   const [queue, setQueue] = useState([]);

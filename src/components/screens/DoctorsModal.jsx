@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import api from '../services/api';
-import './DoctorsModal.css'; 
+import api from '../../services/api';
+import '../styles/DoctorsModal.css'; 
 
 const DoctorsModal = ({ isOpen, onClose }) => {
   const [doctors, setDoctors] = useState([]);

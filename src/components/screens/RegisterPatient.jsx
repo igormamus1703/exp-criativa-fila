@@ -1,7 +1,7 @@
 // src/components/RegisterPatient.jsx
 import React, { useState } from 'react';
-import api from '../services/api';
-import './RegisterPatient.css';
+import api from '../../services/api';
+import '../styles/RegisterPatient.css';
 
 export default function RegisterPatient({ userId, adminMode = false, onRegistered }) {
   const [form, setForm] = useState({

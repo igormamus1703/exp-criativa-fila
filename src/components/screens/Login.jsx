@@ -1,8 +1,8 @@
 import React, { useState, useContext, useEffect } from 'react';
-import api from '../services/api';
-import { AuthContext } from '../context/AuthContext';
-import './Login.css';
-import logo from '../assets/logo.png';
+import api from '../../services/api';
+import { AuthContext } from '../../context/AuthContext';
+import '../styles/Login.css';
+import logo from '../../assets/logo.png';
 
 export default function Login({ onCreate, onSuccess }) {
   const { user, login } = useContext(AuthContext);

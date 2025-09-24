@@ -1,11 +1,11 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { AuthContext } from './context/AuthContext';
-import AdminDashboard from './components/AdminDashboard';
-import CreateUser from './components/CreateUser';
-import DoctorDashboard from './components/DoctorDashboard';
-import Login from './components/Login';
-import RegisterPatient from './components/RegisterPatient';
-import UserQueue from './components/UserQueue';
+import AdminDashboard from './components/screens/AdminDashboard';
+import CreateUser from './components/screens/CreateUser';
+import DoctorDashboard from './components/screens/DoctorDashboard';
+import Login from './components/screens/Login';
+import RegisterPatient from './components/screens/RegisterPatient';
+import UserQueue from './components/screens/UserQueue';
 import api from './services/api';
 import './App.css';
 import logo from './assets/logo.png'; // Supondo que você queira o logo no header

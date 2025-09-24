@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import api from '../services/api';
-import './CreateUser.css';
+import api from '../../services/api';
+import '../styles/CreateUser.css';
 
 export default function CreateUser({ onCancel, onSuccess }) {
   const [login, setLogin] = useState('');
