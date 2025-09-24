@@ -43,6 +43,10 @@ export default function DoctorDashboard({ userId }) {
   const [error, setError] = useState('');
 
   const fetchData = useCallback(async () => {
+    if (showAnamneseModal) {
+      return; 
+    }
+
     setLoading(true);
     try {
       const [currentRes, queueRes] = await Promise.all([
@@ -59,7 +63,7 @@ export default function DoctorDashboard({ userId }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showAnamneseModal]);
 
   useEffect(() => {
     fetchData();
