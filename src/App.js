@@ -45,7 +45,12 @@ export default function App() {
     switch (user.role) {
       case 'admin': return <Navigate to="/painel-admin" replace />;
       case 'doctor': return <Navigate to="/painel-medico" replace />;
-      default: return <Navigate to="/fila" replace />;
+      default:
+        if (user.patient_id) {
+          return <Navigate to="/fila" replace />;
+        } else {
+          return <Navigate to="/cadastrar-paciente" replace />;
+        }
     }
   }
 
