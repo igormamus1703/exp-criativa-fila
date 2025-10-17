@@ -13,7 +13,14 @@ import logo from './assets/logo.png';
 
 function Header() {
   const { user, logout } = useContext(AuthContext);
-  if (!user) return null;
+  const location = useLocation();
+
+  // A lógica aqui continua a mesma, mas a decisão principal do layout está no componente App
+  const noHeaderRoutes = ['/login', '/criar-conta', '/cadastrar-paciente', '/'];
+  if (!user || noHeaderRoutes.includes(location.pathname)) {
+    return null;
+  }
+
   return (
     <header className="app-header">
       <div className="header-left">
@@ -38,19 +45,28 @@ const ProtectedRoute = () => {
 export default function App() {
   const { user } = useContext(AuthContext);
   const location = useLocation();
-  const containerClassName = user ? "container header-active" : "container no-header-active";
+
+  // **ALTERAÇÃO PRINCIPAL AQUI**
+  // Adicionamos a rota '/' à lista de rotas que não devem mostrar o cabeçalho.
+  const noHeaderRoutes = ['/login', '/criar-conta', '/cadastrar-paciente', '/'];
+  const isHeaderActive = user && !noHeaderRoutes.includes(location.pathname);
+
+  const containerClassName = isHeaderActive
+    ? "container header-active"
+    : "container no-header-active";
 
   function DashboardRedirect() {
     if (!user) return <Navigate to="/login" replace />;
+    
+    if (user.role === 'user' && !user.patient_id) {
+        return <Navigate to="/cadastrar-paciente" replace />;
+    }
+
     switch (user.role) {
       case 'admin': return <Navigate to="/painel-admin" replace />;
       case 'doctor': return <Navigate to="/painel-medico" replace />;
-      default:
-        if (user.patient_id) {
-          return <Navigate to="/fila" replace />;
-        } else {
-          return <Navigate to="/cadastrar-paciente" replace />;
-        }
+      case 'user': return <Navigate to="/fila" replace />;
+      default: return <Navigate to="/login" replace/>;
     }
   }
 
@@ -62,12 +78,14 @@ export default function App() {
           <Route path="/" element={<DashboardRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/criar-conta" element={<CreateUser />} />
+          
           <Route element={<ProtectedRoute />}>
             <Route path="/painel-admin" element={<AdminDashboard />} />
             <Route path="/painel-medico" element={<DoctorDashboard />} />
             <Route path="/fila" element={<UserQueue />} />
             <Route path="/cadastrar-paciente" element={<RegisterPatient />} />
           </Route>
+          
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AnimatePresence>

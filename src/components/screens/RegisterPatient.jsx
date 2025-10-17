@@ -1,11 +1,15 @@
-import React, { useState, useContext } from 'react'; // Adicionado useContext
+import React, { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { IMaskInput } from 'react-imask'; // 1. Importar o componente da nova biblioteca
 import api from '../../services/api';
-import { motion } from 'framer-motion'; // Adicionado motion
-import { AuthContext } from '../../context/AuthContext'; // Adicionado AuthContext
+import { motion } from 'framer-motion';
+import { AuthContext } from '../../context/AuthContext';
 import '../styles/RegisterPatient.css';
 
 export default function RegisterPatient({ adminMode = false, onRegistered }) {
-  const { user } = useContext(AuthContext); // Obter usuário do contexto
+  const { user, logout } = useContext(AuthContext);
+  const navigate = useNavigate();
+  
   const [form, setForm] = useState({
     cpf: '',
     name: '',
@@ -17,7 +21,9 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
+  // A função de handleChange foi simplificada, a nova biblioteca lida com o valor não formatado
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
@@ -26,37 +32,47 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setIsLoading(true);
 
     if (!user) {
       setError("Você precisa estar logado para realizar esta ação.");
+      setIsLoading(false);
       return;
     }
 
     try {
-      const payload = { ...form, user_id: user.user_id };
+       // O CPF já vem sem a máscara, não precisamos mais do .replace()
+      const payload = { 
+        ...form,
+        user_id: user.user_id 
+      };
+      
       const config = {
         headers: { Authorization: `Bearer ${user.token}` }
       };
 
       if (adminMode) {
-        // Usa o novo endpoint /patients/admin
         await api.post('/patients/admin', payload, config);
-        setSuccess('Paciente cadastrado e enfileirado com sucesso!');
         if (onRegistered) onRegistered();
       } else {
-        // Modo normal (usuário comum): só cria paciente
         await api.post('/patients', payload, config);
-        setSuccess('Cadastro realizado com sucesso!');
-        if (onRegistered) onRegistered();
+        setSuccess('Cadastro realizado com sucesso! Redirecionando...');
+        setTimeout(() => window.location.href = '/fila', 2000); 
       }
     } catch (err) {
       console.error('Erro ao cadastrar paciente:', err);
       setError(err.response?.data?.error || 'Erro ao cadastrar paciente');
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleBackToLogin = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
-    // Removido o container duplicado e adicionada a animação
     <motion.div
       className="register-box"
       initial={{ opacity: 0, x: -100 }}
@@ -65,19 +81,18 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
       transition={{ duration: 0.5 }}
     >
       <h2>
-        {adminMode
-          ? 'Cadastro Presencial e Enfileirar'
-          : 'Cadastro Completo do Paciente'}
+        {adminMode ? 'Cadastro Presencial e Enfileirar' : 'Complete seu Cadastro'}
       </h2>
       {error && <p className="error">{error}</p>}
       {success && <p className="success">{success}</p>}
       <form className="form" onSubmit={handleSubmit}>
-        <input
+        {/* 2. Usar o novo componente IMaskInput para o CPF */}
+        <IMaskInput
+          mask="000.000.000-00"
           name="cpf"
-          type="text"
-          placeholder="CPF (somente números)"
+          placeholder="CPF"
           value={form.cpf}
-          onChange={handleChange}
+          onAccept={(value) => handleChange({ target: { name: 'cpf', value } })}
           required
         />
         <input
@@ -125,9 +140,16 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
           value={form.insurance_number}
           onChange={handleChange}
         />
-        <button type="submit" className="submit-btn">
-          {adminMode ? 'Cadastrar e Enfileirar' : 'Cadastrar Paciente'}
-        </button>
+        <div className="buttons-row">
+            <button type="submit" className="submit-btn" disabled={isLoading}>
+                {isLoading ? 'Aguarde...' : (adminMode ? 'Cadastrar e Enfileirar' : 'Finalizar Cadastro')}
+            </button>
+            {!adminMode && (
+                <button type="button" className="back-btn" onClick={handleBackToLogin}>
+                    Voltar
+                </button>
+            )}
+        </div>
       </form>
     </motion.div>
   );
