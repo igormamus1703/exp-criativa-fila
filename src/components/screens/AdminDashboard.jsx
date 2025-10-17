@@ -1,59 +1,72 @@
-// src/components/AdminDashboard.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react'; // Adicionado useContext
 import api from '../../services/api';
 import RegisterPatient from './RegisterPatient';
+import { motion } from 'framer-motion';
+import { AuthContext } from '../../context/AuthContext'; // Importar o AuthContext
 import '../styles/AdminDashboard.css';
 
 export default function AdminDashboard() {
+  const { user } = useContext(AuthContext); // Obter o usuário (com token) do contexto
   const [queue, setQueue] = useState([]);
   const [showRegister, setShowRegister] = useState(false);
   const [error, setError] = useState('');
 
-  // Carrega a fila do servidor
   const loadQueue = async () => {
     try {
-      const res = await api.get('/queue');
+      // Adicionado o header de autorização que faltava
+      const res = await api.get('/queue', {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
       setQueue(res.data);
     } catch (err) {
       console.error('Erro ao carregar fila:', err);
+      setError('Não foi possível carregar a fila.');
     }
   };
 
   useEffect(() => {
-    loadQueue();
-  }, []);
+    if (user) { // Garante que só carrega a fila se houver um usuário
+      loadQueue();
+    }
+  }, [user]); // Adicionado user como dependência
 
-  // Remove paciente da fila
   const handleRemove = async (entryId) => {
     try {
-      await api.delete(`/queue/${entryId}`);
+      // Adicionado o header de autorização que faltava
+      await api.delete(`/queue/${entryId}`, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
       loadQueue();
     } catch (err) {
       console.error('Erro ao remover da fila:', err);
+      setError('Não foi possível remover o paciente.');
     }
   };
 
-  // Callback após cadastro/admin, recarrega fila e esconde formulário
   const handleRegistered = () => {
     setShowRegister(false);
     loadQueue();
   };
 
   return (
-    <div className="container">
-      <div className="admin-box">
+    <>
+      <motion.div
+        className="admin-box"
+        initial={{ opacity: 0, x: -100 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 100 }}
+        transition={{ duration: 0.5 }}
+      >
         <h2>Painel de Administração</h2>
 
-        {/* Número de pessoas na fila */}
         <p className="queue-count">
           {queue.length} pessoa{queue.length !== 1 && 's'} na fila
         </p>
 
-        {/* Lista de nomes com botão Remover */}
         <ul className="admin-list">
           {queue.map((entry) => (
             <li key={entry.id} className="admin-item">
-              {entry.name} {/* O SELECT /queue já inclui p.name */}
+              {entry.name}
               <button
                 className="remove-btn"
                 onClick={() => handleRemove(entry.id)}
@@ -64,7 +77,6 @@ export default function AdminDashboard() {
           ))}
         </ul>
 
-        {/* Botão que abre o formulário de cadastro + enqueue */}
         <button
           className="open-register-btn"
           onClick={() => {
@@ -75,16 +87,15 @@ export default function AdminDashboard() {
           Cadastrar e Enfileirar
         </button>
         {error && <p className="error">{error}</p>}
-      </div>
+      </motion.div>
 
-      {/* Se showRegister=true, renderiza RegisterPatient em modo admin */}
       {showRegister && (
         <RegisterPatient
-          userId={null}     // Opcional: se admin não precisa de userId, pode passar null
+          userId={null}
           adminMode={true}
           onRegistered={handleRegistered}
         />
       )}
-    </div>
+    </>
   );
 }

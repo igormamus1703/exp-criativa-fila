@@ -1,20 +1,28 @@
-.login-box {
-  background: var(--card-bg);
-  border-radius: 20px;
-  padding: 2rem 1.5rem;
-  box-shadow: 0 6px 16px var(--shadow);
-  text-align: center;
-}
-
-.logo {
-  width: 100px;
-  margin: 0 auto 1rem;
-}
+/* src/components/Login.css */
 
 .login-box h1 {
-  font-size: 1.5rem;
-  color: var(--text-dark);
+  font-size: 1.8rem;
+  color: var(--cor-texto);
+  margin-bottom: 0.25rem;
+}
+
+.subtitle-container {
+  height: 1.2em; /* Reserva o espaço de uma linha de texto */
   margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: #868e96;
+}
+
+.login-box .logo {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 0.5rem; 
 }
 
 .login-form {
@@ -23,48 +31,16 @@
   gap: 1rem;
 }
 
-.login-form input {
-  padding: 0.75rem 1rem;
-  background: #f1f3f5;
-  border: 1px solid #ced4da;
-  border-radius: 8px;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-}
-
-.login-form input:focus {
-  outline: none;
-  border-color: #00a18c;
-}
-
-.login-form button {
-  padding: 0.75rem;
-  background: var(--bg-primary);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 500;
-  border: none;
-  border-radius: 50px; /* botão em “pill” */
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
-}
-
-.login-form button:hover {
-  opacity: 0.9;
-}
-
-.login-form button:active {
-  transform: scale(0.98);
-}
-
 .link {
-  margin-top: 1rem;
+  margin-top: 1.5rem;
   font-size: 0.9rem;
-  color: var(--bg-primary);
+  color: var(--cor-primaria);
   cursor: pointer;
+  font-weight: 500;
   transition: opacity 0.2s;
 }
 
 .link:hover {
   opacity: 0.8;
+  text-decoration: underline;
 }

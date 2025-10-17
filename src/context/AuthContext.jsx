@@ -1,33 +1,27 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useState } from 'react';
 
 export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-  // Estado inicial: tenta ler user_id e role do localStorage
   const [user, setUser] = useState(() => {
-    const storedId = localStorage.getItem('user_id');
-    const storedRole = localStorage.getItem('role');
-    if (storedId && storedRole) {
-      return { user_id: storedId, role: storedRole };
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        return JSON.parse(storedUser);
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
   });
 
-  // Função de login: salva user_id e role no context e no localStorage
-  function login({ user_id, role, token }) {
-    localStorage.setItem('user_id', user_id);
-    localStorage.setItem('role', role);
-    if (token) {
-      localStorage.setItem('token', token);
-    }
-    setUser({ user_id, role });
+  function login(userData) {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
   }
 
-  // Função de logout: limpa dados de sessão
   function logout() {
-    localStorage.removeItem('user_id');
-    localStorage.removeItem('role');
-    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setUser(null);
   }
 

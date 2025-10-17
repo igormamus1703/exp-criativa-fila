@@ -1,192 +1,170 @@
-// src/pages/DoctorDashboard.jsx
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react'; // Adicionado useContext
 import api from '../../services/api';
 import AnamneseModal from './AnamneseModal';
+import { motion } from 'framer-motion'; // Adicionado motion
+import { AuthContext } from '../../context/AuthContext'; // Adicionado AuthContext
 import '../styles/DoctorDashboard.css';
 
-// FUNÇÃO PARA CALCULAR A IDADE (VERSÃO FINAL E ROBUSTA)
-// Ela lida com datas nulas e formata a saída corretamente.
-const calculateAge = (birthDateString) => {
-  // Se não houver data, retorna uma mensagem padrão.
-  if (!birthDateString) {
-    return 'Não informada';
-  }
-
-  // Cria o objeto Date a partir da string da API.
-  const birthDate = new Date(birthDateString);
-
-  // Checa se a data criada é válida.
-  if (isNaN(birthDate.getTime())) {
-    return 'Data inválida';
-  }
-
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  
-  // Ajuste para caso o aniversário ainda não tenha ocorrido no ano.
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
-  }
-  
-  return `${age} anos`; // Retorna a string completa.
-};
-
-
-export default function DoctorDashboard({ userId }) {
-  const [attendingPatient, setAttendingPatient] = useState(null);
-  const [nextPatient, setNextPatient] = useState(null);
-  const [waitingQueueSize, setWaitingQueueSize] = useState(0);
+export default function DoctorDashboard() { // Removida a prop userId
+  const { user } = useContext(AuthContext); // Obter usuário do contexto
+  const [pacienteAtual, setPacienteAtual] = useState(null);
+  const [queueSize, setQueueSize] = useState(0);
+  const [loadingQueue, setLoadingQueue] = useState(true);
+  const [errorQueue, setErrorQueue] = useState('');
   const [anamnese, setAnamnese] = useState(null);
   const [showAnamneseModal, setShowAnamneseModal] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
-  const fetchData = useCallback(async () => {
-    if (showAnamneseModal) {
-      return; 
-    }
+  const fetchQueueData = async () => {
+    if (!user) return; // Não fazer nada se o usuário não estiver logado
 
-    setLoading(true);
     try {
-      const [currentRes, queueRes] = await Promise.all([
-        api.get('/queue/current'),
-        api.get('/queue'),
-      ]);
-      setAttendingPatient(currentRes.data);
-      setNextPatient(queueRes.data?.[0] || null);
-      setWaitingQueueSize(queueRes.data.length);
-      if (!currentRes.data) setAnamnese(null);
+      // Adicionado header de autorização
+      const response = await api.get('/queue', {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      const patients = response.data;
+      setQueueSize(patients.length);
+      setPacienteAtual(patients[0] || null);
+      setLoadingQueue(false);
+
+      if (patients[0]) {
+        try {
+          // Adicionado header de autorização
+          const resAnamnese = await api.get(`/patients/${patients[0].patient_id}/anamnesis`, {
+            headers: { Authorization: `Bearer ${user.token}` }
+          });
+          if (resAnamnese.data && resAnamnese.data.length > 0) {
+            setAnamnese(resAnamnese.data[0]);
+          } else {
+            setAnamnese(null);
+          }
+        } catch (err) {
+          console.error('Erro ao buscar anamnese:', err);
+          setAnamnese(null);
+        }
+      } else {
+        setAnamnese(null);
+      }
     } catch (err) {
-      console.error("Erro ao buscar dados:", err);
-      setError('Não foi possível carregar os dados.');
-    } finally {
-      setLoading(false);
+      console.error(err);
+      setErrorQueue('Erro ao carregar dados da fila');
+      setLoadingQueue(false);
     }
-  }, [showAnamneseModal]);
+  };
 
   useEffect(() => {
-    fetchData();
-    const intervalId = setInterval(fetchData, 5000);
+    fetchQueueData();
+    const intervalId = setInterval(fetchQueueData, 5000);
     return () => clearInterval(intervalId);
-  }, [fetchData]);
+  }, [user]); // Adicionado user como dependência
 
-  useEffect(() => {
-    if (!attendingPatient) {
-      setAnamnese(null);
-      return;
-    }
-    const fetchAnamnesis = async () => {
-      try {
-        const resAnamnese = await api.get(`/queue/${attendingPatient.id}/anamnesis`);
-        setAnamnese(resAnamnese.data?.[0] || null);
-      } catch (err) { console.error('Erro ao buscar anamnese:', err); }
-    };
-    fetchAnamnesis();
-  }, [attendingPatient]);
-
-  const handleAttendPatient = async (queueEntryId) => {
-    setError('');
+  const handleAttendPatient = async (patientId) => {
     try {
-      await api.post(`/queue/${queueEntryId}/attend`);
-      await fetchData();
+      // Adicionado header de autorização
+      await api.post(`/queue/${patientId}/attend`, {}, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      fetchQueueData();
     } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao iniciar atendimento.');
+      console.error(err);
+      setErrorQueue('Erro ao atender paciente');
     }
   };
 
-  const handleFinishAttendance = async () => {
-    if (!attendingPatient) return;
-    setError('');
-    try {
-      await api.post(`/queue/${attendingPatient.id}/finish`);
-      await fetchData();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Erro ao finalizar atendimento.');
-    }
+  const getPriorityText = (priority) => {
+    return priority === 1 ? 'Prioridade' : 'Normal';
   };
 
-  const getPriorityText = (priority) => (priority ? 'Prioridade' : 'Normal');
-
-  if (loading && !attendingPatient && !nextPatient) return <div>Carregando...</div>;
+  if (loadingQueue) return <div>Carregando...</div>;
+  if (errorQueue) return <div className="error">{errorQueue}</div>;
 
   return (
-    <div className="doctor-dashboard">
+    <motion.div
+      className="doctor-dashboard"
+      initial={{ opacity: 0, x: -100 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 100 }}
+      transition={{ duration: 0.5 }}
+    >
       <h2>Painel do Médico</h2>
-      {error && <div className="error">{error}</div>}
 
       <div className="queue-info">
         <div className="queue-size">
-          <h3>Fila de Espera</h3>
-          <span className="size-number">{waitingQueueSize}</span>
+          <h3>Tamanho da Fila</h3>
+          <span className="size-number">{queueSize > 0 ? queueSize - 1 : 0}</span>
           <p>pacientes aguardando</p>
         </div>
       </div>
 
-      {attendingPatient ? (
-        <div className="paciente-atual">
-          <h3>Paciente em Atendimento</h3>
+      <div className="paciente-atual">
+        <h3>Paciente Atual</h3>
+        {pacienteAtual ? (
           <div className="patient-card">
             <div className="patient-info">
-              <div className="info-row"><span className="label">Nome:</span><span className="value">{attendingPatient.name}</span></div>
-              {/* CORREÇÃO: Chamando a função corretamente */}
-              <div className="info-row"><span className="label">Idade:</span><span className="value">{calculateAge(attendingPatient.birth_date)}</span></div>
-              <div className="info-row"><span className="label">CPF:</span><span className="value">{attendingPatient.cpf}</span></div>
-              <div className="info-row"><span className="label">Email:</span><span className="value">{attendingPatient.email || 'N/A'}</span></div>
-              <div className="info-row"><span className="label">Início Atend.:</span><span className="value">{new Date(attendingPatient.served_at).toLocaleTimeString()}</span></div>
-            </div>
-            <div className="buttons-row">
-               <button onClick={() => setShowAnamneseModal(true)} className="attend-button anamnesis">
-                {anamnese ? 'Ver/Editar Anamnese' : 'Criar Anamnese'}
-              </button> 
-              <button onClick={handleFinishAttendance} className="attend-button finish">
-                Finalizar Atendimento
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : nextPatient ? (
-        <div className="paciente-atual">
-          <h3>Próximo Paciente</h3>
-          <div className="patient-card">
-            <div className="patient-info">
-              <div className="info-row"><span className="label">Nome:</span><span className="value">{nextPatient.name}</span></div>
-              {/* CORREÇÃO: Chamando a função corretamente */}
-              <div className="info-row"><span className="label">Idade:</span><span className="value">{calculateAge(nextPatient.birth_date)}</span></div>
-              <div className="info-row"><span className="label">CPF:</span><span className="value">{nextPatient.cpf}</span></div>
-              <div className="info-row"><span className="label">Email:</span><span className="value">{nextPatient.email || 'N/A'}</span></div>
-              <div className="info-row"><span className="label">Chegada:</span><span className="value">{new Date(nextPatient.created_at).toLocaleTimeString()}</span></div>
+              <div className="info-row">
+                <span className="label">Nome:</span>
+                <span className="value">{pacienteAtual.name}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">Sexo:</span>
+                <span className="value">{pacienteAtual.gender}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">Email:</span>
+                <span className="value">{pacienteAtual.email}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">Telefone:</span>
+                <span className="value">{pacienteAtual.phone}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">CPF:</span>
+                <span className="value">{pacienteAtual.cpf}</span>
+              </div>
               <div className="info-row">
                 <span className="label">Prioridade:</span>
-                <span className={`priority-badge ${nextPatient.is_priority ? 'priority' : 'normal'}`}>
-                  {getPriorityText(nextPatient.is_priority)}
+                <span className={`priority-badge ${pacienteAtual.is_priority === 1 ? 'priority' : 'normal'}`}>
+                  {getPriorityText(pacienteAtual.is_priority)}
+                </span>
+              </div>
+              <div className="info-row">
+                <span className="label">Horário de Chegada:</span>
+                <span className="value">
+                  {new Date(pacienteAtual.created_at).toLocaleTimeString()}
                 </span>
               </div>
             </div>
+
             <div className="buttons-row">
-              <button onClick={() => handleAttendPatient(nextPatient.id)} className="attend-button">
+              <button
+                onClick={() => handleAttendPatient(pacienteAtual.id)}
+                className="attend-button"
+              >
                 Atender Paciente
+              </button>
+              <button
+                onClick={() => setShowAnamneseModal(true)}
+                className="attend-button"
+              >
+                {anamnese ? 'Ver Anamnese' : 'Criar Anamnese'}
               </button>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="paciente-atual">
-          <h3>Atendimento</h3>
-          <p className="no-patients">A fila de espera está vazia.</p>
-        </div>
-      )}
+        ) : (
+          <p className="no-patients">Não há pacientes na fila no momento</p>
+        )}
+      </div>
 
-      {showAnamneseModal && attendingPatient && (
+      {showAnamneseModal && pacienteAtual && (
         <AnamneseModal
-          queueEntryId={attendingPatient.id}
+          patientId={pacienteAtual.patient_id}
           existingAnamnese={anamnese}
           onClose={() => {
             setShowAnamneseModal(false);
-            fetchData();
+            fetchQueueData();
           }}
         />
       )}
-    </div>
+    </motion.div>
   );
 }
