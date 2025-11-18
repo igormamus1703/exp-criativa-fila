@@ -29,23 +29,26 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
   };
 
   const handleSubmit = async e => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setIsLoading(true);
+  e.preventDefault();
+  setError('');
+  setSuccess('');
+  setIsLoading(true);
 
-    if (!user) {
-      setError("Você precisa estar logado para realizar esta ação.");
-      setIsLoading(false);
-      return;
-    }
+  if (!user) {
+    setError("Você precisa estar logado para realizar esta ação.");
+    setIsLoading(false);
+    return;
+  }
 
-    try {
-       // O CPF já vem sem a máscara, não precisamos mais do .replace()
-      const payload = { 
-        ...form,
-        user_id: user.user_id 
-      };
+  try {
+    // CORREÇÃO AQUI: Removemos pontos e traços do CPF antes de enviar
+    const cleanCpf = form.cpf.replace(/\D/g, ''); 
+
+    const payload = { 
+      ...form,
+      cpf: cleanCpf, // Envia o CPF limpo
+      user_id: user.user_id 
+    };
       
       const config = {
         headers: { Authorization: `Bearer ${user.token}` }

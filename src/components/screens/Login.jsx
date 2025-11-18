@@ -1,6 +1,7 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import api from '../../services/api'; // <--- Importação adicionada
 import { motion, AnimatePresence } from 'framer-motion';
 import '../styles/Login.css';
 import logo from '../../assets/logo.png';
@@ -11,6 +12,7 @@ export default function Login() {
   const [loginField, setLoginField] = useState('');
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // Estado de carregamento
   
   const subtitles = ['Seja Bem Vindo', 'Be Welcome'];
   const [subtitle, setSubtitle] = useState(subtitles[0]);
@@ -34,18 +36,24 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
-    setTimeout(() => {
-      let mockUser = { user_id: 1, token: 'fake-token-for-testing' };
-      if (loginField.toLowerCase() === 'admin') {
-        mockUser.role = 'admin';
-      } else if (loginField.toLowerCase() === 'doctor') {
-        mockUser.role = 'doctor';
-      } else {
-        mockUser.role = 'user';
-      }
-      login(mockUser);
-    }, 500);
+    setIsLoading(true);
+
+    try {
+      // Agora chama a API de verdade
+      const response = await api.post('/auth/login', {
+        login: loginField,
+        senha: senha
+      });
+
+      // O backend retorna { user_id, role }
+      login(response.data);
+      
+      // O useEffect lá em cima vai detectar a mudança em 'user' e redirecionar para '/'
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.error || 'Usuário ou senha incorretos.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -88,8 +96,11 @@ export default function Login() {
           placeholder="Senha"
           value={senha}
           onChange={e => setSenha(e.target.value)}
+          required
         />
-        <button type="submit">Entrar</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Entrando...' : 'Entrar'}
+        </button>
       </form>
       <p className="link" onClick={() => navigate('/criar-conta')}>
         Criar uma conta
