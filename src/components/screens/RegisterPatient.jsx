@@ -1,13 +1,14 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IMaskInput } from 'react-imask'; // 1. Importar o componente da nova biblioteca
+import { IMaskInput } from 'react-imask';
 import api from '../../services/api';
 import { motion } from 'framer-motion';
 import { AuthContext } from '../../context/AuthContext';
 import '../styles/RegisterPatient.css';
 
 export default function RegisterPatient({ adminMode = false, onRegistered }) {
-  const { user, logout } = useContext(AuthContext);
+  // Importamos 'login' para atualizar a sessão localmente após o cadastro
+  const { user, logout, login } = useContext(AuthContext);
   const navigate = useNavigate();
   
   const [form, setForm] = useState({
@@ -23,42 +24,58 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // A função de handleChange foi simplificada, a nova biblioteca lida com o valor não formatado
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async e => {
-  e.preventDefault();
-  setError('');
-  setSuccess('');
-  setIsLoading(true);
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
 
-  if (!user) {
-    setError("Você precisa estar logado para realizar esta ação.");
-    setIsLoading(false);
-    return;
-  }
+    if (!user) {
+      setError("Você precisa estar logado para realizar esta ação.");
+      setIsLoading(false);
+      return;
+    }
 
-  try {
-    // CORREÇÃO AQUI: Removemos pontos e traços do CPF antes de enviar
-    const cleanCpf = form.cpf.replace(/\D/g, ''); 
+    try {
+      // Remove pontos e traços do CPF para enviar apenas números (VARCHAR(11))
+      const cleanCpf = form.cpf.replace(/\D/g, ''); 
 
-    const payload = { 
-      ...form,
-      cpf: cleanCpf, // Envia o CPF limpo
-      user_id: user.user_id 
-    };
+      const payload = { 
+        ...form,
+        cpf: cleanCpf,
+        user_id: user.user_id 
+      };
       
       const config = {
         headers: { Authorization: `Bearer ${user.token}` }
       };
 
       if (adminMode) {
+        // Modo Admin: Apenas cadastra e (opcionalmente) notifica o pai
         await api.post('/patients/admin', payload, config);
         if (onRegistered) onRegistered();
+        // Limpar formulário ou fechar modal pode ser feito aqui se desejar
+        setSuccess('Paciente cadastrado e enfileirado com sucesso!');
+        setForm({
+            cpf: '', name: '', email: '', phone: '', birth_date: '', insurance_provider: '', insurance_number: ''
+        });
       } else {
-        await api.post('/patients', payload, config);
+        // Modo Usuário: Cadastra e atualiza a sessão
+        const response = await api.post('/patients', payload, config);
+        
+        // ATUALIZAÇÃO IMPORTANTE:
+        // Injetamos o novo patient_id na sessão atual do usuário.
+        // Assim, o App.js sabe que ele já tem cadastro e libera o acesso à fila.
+        const updatedUser = { 
+          ...user, 
+          patient_id: response.data.id 
+        };
+        login(updatedUser);
+
         setSuccess('Cadastro realizado com sucesso! Redirecionando...');
         setTimeout(() => window.location.href = '/fila', 2000); 
       }
@@ -89,7 +106,6 @@ export default function RegisterPatient({ adminMode = false, onRegistered }) {
       {error && <p className="error">{error}</p>}
       {success && <p className="success">{success}</p>}
       <form className="form" onSubmit={handleSubmit}>
-        {/* 2. Usar o novo componente IMaskInput para o CPF */}
         <IMaskInput
           mask="000.000.000-00"
           name="cpf"

@@ -1,12 +1,10 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 
-// A função abaixo recebe 'pool' como um argumento do server.js
-// e retorna o roteador pronto.
 export default function createUserRouter(pool) {
   const router = express.Router();
 
-  // Endpoint para criar um novo usuário (seja admin, doctor ou patient)
+  // Endpoint para criar um novo usuário
   router.post('/users', async (req, res) => {
     const { login, senha, role } = req.body;
     if (!login || !senha || !role) return res.status(400).json({ error: 'Dados incompletos' });
@@ -21,11 +19,13 @@ export default function createUserRouter(pool) {
     }
   });
 
-  // Endpoint para autenticar um usuário e retornar seu id e role
+  // --- ALTERAÇÃO AQUI ---
+  // Endpoint para autenticar um usuário
   router.post('/auth/login', async (req, res) => {
     const { login, senha } = req.body;
     if (!login || !senha) return res.status(400).json({ error: 'Dados incompletos' });
     try {
+      // 1. Busca o usuário básico
       const [rows] = await pool.query('SELECT id, senha, role FROM usuarios WHERE login = ?', [login]);
       if (rows.length === 0) return res.status(401).json({ error: 'Credenciais inválidas' });
 
@@ -34,7 +34,22 @@ export default function createUserRouter(pool) {
 
       if (!match) return res.status(401).json({ error: 'Credenciais inválidas' });
 
-      res.json({ user_id: user.id, role: user.role });
+      // 2. CORREÇÃO: Verifica se existe um paciente vinculado a este usuário
+      let patientId = null;
+      if (user.role === 'user') {
+        const [pRows] = await pool.query('SELECT id FROM patients WHERE user_id = ?', [user.id]);
+        if (pRows.length > 0) {
+          patientId = pRows[0].id;
+        }
+      }
+
+      // 3. Retorna o patient_id junto (se existir)
+      res.json({ 
+        user_id: user.id, 
+        role: user.role,
+        patient_id: patientId 
+      });
+
     } catch (err) {
       console.error('Erro no login:', err);
       res.status(500).json({ error: 'Erro interno' });
